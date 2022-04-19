@@ -1,2 +1,16 @@
 #+TITLE: Readme
 C++20 class for intervals and bounded types
+* Types provided
+In ~interval.hpp~
+- ~Clusive~:
+  Is it inclusive or exclusive?
+- ~end<Poset>~:
+  The endpoint of an interval in ~Poset~. Ends can either be inclusive or exclusive.
+- ~interval<Poset>~
+  An interval in ~Poset~. They are cannonicalized in construction so that all empty intervals have the same representation. This way, you can use ~interval~ as a non-type template argument!
+
+In ~bounded.hpp~
+ - ~bounded<std::three_way_comparable Poset, interval<Poset> bounds>~
+    -  Constructing ~assert~ s this point is inside =bounds=.
+    - ~a_bounded.get()~ returns the underlying data (and tells the compiler to assume we are inside the bounds).
+    - Your binary operators work
