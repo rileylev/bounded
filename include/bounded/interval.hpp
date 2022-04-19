@@ -18,6 +18,9 @@ namespace impl {
   }
 } // namespace impl
 
+/**
+ * Is it inclusive or exclusive?
+ */
 enum class Clusive : bool {
   in = true,
   ex = false,
@@ -25,6 +28,9 @@ enum class Clusive : bool {
 constexpr Clusive operator*(Clusive x, Clusive y)
     NOEX(static_cast<Clusive>(static_cast<bool>(x) and static_cast<bool>(y)))
 
+/**
+ * Represents either end of an interval
+ */
 template<std::three_way_comparable Poset>
 struct end {
   Poset   point;
@@ -51,21 +57,26 @@ constexpr auto operator*(end<X> x, end<Y> y)
 
 using passing_traits::Read;
 using passing_traits::ReadOut;
-//
-/* To use this as a non-type template parameter, we can't use private.
-
- https://en.cppreference.com/w/cpp/language/template_parameters:
- "A non-type template parameter must have a structural type, which is one
-of the following...
-
- -  a literal class type with the following properties:
-
- -  all base classes and non-static data members are public and non-mutable
-and the types of all base classes and non-static data members are
-structural types or (possibly multi-dimensional) array thereof.
-*/
+/**
+ * Represents an interval in any `std::three_way_comparable` Poset.
+ *
+ * This is a structural type so it can be used as a non-type template
+ * parameter. A name ending with a trailing underscore is morally private.
+ */
 template<std::three_way_comparable Poset>
 struct interval {
+  /* To use this as a non-type template parameter, we can't use private.
+
+   https://en.cppreference.com/w/cpp/language/template_parameters:
+   "A non-type template parameter must have a structural type, which is one
+  of the following...
+
+   -  a literal class type with the following properties:
+
+   -  all base classes and non-static data members are public and
+  non-mutable and the types of all base classes and non-static data members
+  are structural types or (possibly multi-dimensional) array thereof.
+  */
   Poset   btm_             = {};
   Poset   top_             = {};
   Clusive btm_clusive_ : 1 = Clusive::ex;
@@ -79,13 +90,16 @@ struct interval {
   constexpr auto btm_end() ARROW(end{btm(), btm_clusive()})
   constexpr auto top_end() ARROW(end{top(), top_clusive()})
 
+  /**
+   * Default to the empty interval
+   */
   constexpr interval() = default;
 
   constexpr bool empty() const NOEX(*this == interval{})
 
-  constexpr interval(Poset btm_in, Poset top_ex)
-      NOEX_CONS(interval{end{std::move(btm_in), Clusive::in},
-                         end{std::move(top_ex), Clusive::ex}}) {}
+  /**
+   * Construct an interval from its two ends
+   */
   constexpr interval(end<Poset> btm, end<Poset> top) noexcept(
       std::is_nothrow_move_constructible_v<Poset>and noexcept(
           interval{},
@@ -108,6 +122,9 @@ struct interval {
 
   constexpr friend bool operator==(interval, interval) = default;
 
+  /**
+   * Does this interval contain x? x∈*this?
+   */
   constexpr bool
       has(Read<Poset> x) noexcept(noexcept(x <=> btm(), x <=> top())) {
     auto const x_btm = x <=> btm();
@@ -127,6 +144,9 @@ template<std::three_way_comparable X, std::three_way_comparable Y>
 constexpr auto operator==(interval<X> x, interval<Y> y)
     ARROW(x.btm_end() == y.btm_end() and x.top_end() == y.top_end())
 
+/**
+ * Three-way-compare intervals by set inclusion: A < B iff A ⊂ B
+ */
 template<std::three_way_comparable X, std::three_way_comparable Y>
 constexpr std::partial_ordering
     operator<=>(Read<interval<X>> x, Read<interval<Y>> y) {
@@ -204,6 +224,6 @@ constexpr auto operator*(Read<interval<X>> x, Read<interval<Y>> y)
 // tricky cases [-1,1) * [-1,1] = [-1,1]
 
 static_assert(!interval<int>{}.has(0));
-} // namespace interval
+} // namespace bounded
 
 #endif
