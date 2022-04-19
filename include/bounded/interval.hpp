@@ -48,14 +48,26 @@ constexpr auto operator*(end<X> x, end<Y> y)
 using passing_traits::Read;
 using passing_traits::ReadOut;
 template<std::three_way_comparable Poset>
-class interval {
- private:
+//
+/* To use this as a non-type template parameter, we can't use private.
+
+ https://en.cppreference.com/w/cpp/language/template_parameters:
+ "A non-type template parameter must have a structural type, which is one
+of the following...
+
+ -  a literal class type with the following properties:
+
+ -  all base classes and non-static data members are public and non-mutable
+and the types of all base classes and non-static data members are
+structural types or (possibly multi-dimensional) array thereof.
+*/
+
+struct interval {
   Poset   btm_             = {};
   Poset   top_             = {};
   Clusive btm_clusive_ : 1 = Clusive::ex;
   Clusive top_clusive_ : 1 = Clusive::ex;
 
- public:
   READER(btm)
   READER(top)
   READER(btm_clusive)
@@ -169,8 +181,7 @@ constexpr auto operator*(Read<interval<X>> x, Read<interval<Y>> y)
     -> interval<std::invoke_result_t<std::multiplies<>, X, Y>> {
   using prod_t = decltype(std::declval<X>() * std::declval<Y>());
 
-  if(x.empty() or y.empty())
-    return {};
+  if(x.empty() or y.empty()) return {};
 
   std::array<end<prod_t>, 4> prods{
       // clang-format off
