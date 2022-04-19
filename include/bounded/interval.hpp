@@ -1,5 +1,5 @@
-#ifndef INTERVAL_HPP_INCLUDE_GUARD
-#define INTERVAL_HPP_INCLUDE_GUARD
+#ifndef BOUNDED_INTERVAL_HPP_INCLUDE_GUARD
+#define BOUNDED_INTERVAL_HPP_INCLUDE_GUARD
 
 #include "impl/macros.hpp"
 
@@ -9,10 +9,14 @@
 #include <array>
 #include <algorithm>
 
-template<class Less = std::less<>>
-constexpr auto project_less(auto proj, Less less = {}) {
-  return [ proj, less ](auto x, auto y) ARROW(less(proj(x), proj(y)));
-}
+namespace bounded {
+
+namespace impl {
+  template<class Less = std::less<>>
+  constexpr auto project_less(auto proj, Less less = {}) {
+    return [ proj, less ](auto x, auto y) ARROW(less(proj(x), proj(y)));
+  }
+} // namespace impl
 
 enum class Clusive : bool {
   in = true,
@@ -47,7 +51,6 @@ constexpr auto operator*(end<X> x, end<Y> y)
 
 using passing_traits::Read;
 using passing_traits::ReadOut;
-template<std::three_way_comparable Poset>
 //
 /* To use this as a non-type template parameter, we can't use private.
 
@@ -61,7 +64,7 @@ of the following...
 and the types of all base classes and non-static data members are
 structural types or (possibly multi-dimensional) array thereof.
 */
-
+template<std::three_way_comparable Poset>
 struct interval {
   Poset   btm_             = {};
   Poset   top_             = {};
@@ -191,7 +194,7 @@ constexpr auto operator*(Read<interval<X>> x, Read<interval<Y>> y)
       // clang-format on
   };
   auto const btm_end =
-      *std::min_element(prods.begin(), prods.end(), project_less([
+      *std::min_element(prods.begin(), prods.end(), impl::project_less([
                         ] FN(std::pair{_.point, _.clusive == Clusive::ex})));
   auto const top_end =
       *std::max_element(prods.begin(), prods.end(), project_less([
@@ -201,5 +204,6 @@ constexpr auto operator*(Read<interval<X>> x, Read<interval<Y>> y)
 // tricky cases [-1,1) * [-1,1] = [-1,1]
 
 static_assert(!interval<int>{}.has(0));
+} // namespace interval
 
-#endif // INTERVAL_HPP_INCLUDE_GUARD
+#endif
