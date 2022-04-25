@@ -8,6 +8,7 @@
 #include <tuple>
 #include <array>
 #include <algorithm>
+#include <compare>
 
 namespace bounded {
 
@@ -75,13 +76,15 @@ struct interval {
 
    -  all base classes and non-static data members are public and
   non-mutable and the types of all base classes and non-static data members
-  are structural types or (possibly multi-dimensional) array thereof.
+  are structural types or (possibly multi-dimensional) array thereof."
   */
+  // private:
   Poset   btm_             = {};
   Poset   top_             = {};
   Clusive btm_clusive_ : 1 = Clusive::ex;
   Clusive top_clusive_ : 1 = Clusive::ex;
 
+ public:
   READER(btm)
   READER(top)
   READER(btm_clusive)
@@ -133,20 +136,34 @@ struct interval {
     if(x_btm == std::partial_ordering::unordered
        or x_top == std::partial_ordering::unordered)
       return false;
-    // no false positives because empty is normamlized
+    // no false positives because empty is normalized
     return ((x_btm == 0) and (btm_clusive() == Clusive::in))
         or ((x_top == 0) and (top_clusive() == Clusive::in))
         or (0 < x_btm and x_top < 0);
   }
 };
 
+// Allow or disallow operators on intervals over different types?
+// Probably should defer to the underlying types in general
+// If it makes sense to add X + Y, it probably makes sense to add interval<X>
+// + interval<Y> I just wish the builtins were stricter. Allowed =/= makes sense.
 template<std::three_way_comparable X, std::three_way_comparable Y>
 constexpr auto operator==(interval<X> x, interval<Y> y)
     ARROW(x.btm_end() == y.btm_end() and x.top_end() == y.top_end())
 
 /**
  * Three-way-compare intervals by set inclusion: A < B iff A ⊂ B
+ *
+ *  - A <=> B <  0          iff  A ⊂ B
+ *  - A <=> B == 0          iff  A = B
+ *  - A <=> B >  0          iff  A ⊃ B
+ *  - A <=> B == unordered  iff  A ≠ B, A ⊄ B, A ⊅ B
+ *
+ *  Examples:
+ *  [0,1]  <  [0,2]
+ *  [0,1) <=> (0,1] = unordered
  */
+ // TODO: what does weak equivalence mean for subset inclusion?
 template<std::three_way_comparable X, std::three_way_comparable Y>
 constexpr std::partial_ordering
     operator<=>(Read<interval<X>> x, Read<interval<Y>> y) {
@@ -155,8 +172,11 @@ constexpr std::partial_ordering
                        : std::partial_ordering::less;
   else if(y.empty()) return std::partial_ordering::greater;
   else {
+    // clusivity breaks ties
+    // [0,1) vs (0,1) --- the exclusive interval starts a hair higher
     auto const btms = std::pair{x.btm(), x.clusive() == Clusive::ex}
                   <=> std::pair{y.btm(), y.clusive() == Clusive::ex};
+    // [0,1) vs [0,1] --- the inclusive interval ends a hair higher
     auto const tops = std::pair{x.top(), x.clusive() == Clusive::in}
                   <=> std::pair{y.top(), y.clusive() == Clusive::in};
 
@@ -225,5 +245,4 @@ constexpr auto operator*(Read<interval<X>> x, Read<interval<Y>> y)
 
 static_assert(!interval<int>{}.has(0));
 } // namespace bounded
-
 #endif
