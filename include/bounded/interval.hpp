@@ -241,8 +241,8 @@ struct interval : impl::interval_friends {
   READER(btm_clusive)
   READER(top_clusive)
 
-  constexpr auto btm_end() ARROW(end{btm(), btm_clusive()})
-  constexpr auto top_end() ARROW(end{top(), top_clusive()})
+  constexpr auto btm_end() const ARROW(end{btm(), btm_clusive()})
+  constexpr auto top_end() const ARROW(end{top(), top_clusive()})
 
   /**
    * Default to the empty interval
