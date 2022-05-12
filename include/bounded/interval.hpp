@@ -136,8 +136,8 @@ namespace impl {
       std::array<end<prod_t>, 4> prods{
           // clang-format off
                                   /* y.btm_end   ,             y.top_end */
-        /*x.btm_end*/  x.btm_end() * y.btm_end() , x.btm_end * y.top_end(),
-        /*x.top_end*/  x.top_end() * y.btm_end() , x.top_end * y.top_end()
+        /*x.btm_end*/  x.btm_end() * y.btm_end() , x.btm_end() * y.top_end(),
+        /*x.top_end*/  x.top_end() * y.btm_end() , x.top_end() * y.top_end()
           // clang-format on
       };
       auto const btm_end = *std::min_element(
