@@ -275,6 +275,13 @@ struct interval : impl::interval_friends {
   }
 
   /**
+   * Singleton constructor
+   *
+   * TODO: implicit? explicit?
+   */
+  IMPLICIT() constexpr interval(Poset x) : interval(in(x), in(x)) {}
+
+  /**
    * Does this interval contain x? x∈*this?
    */
   constexpr bool
