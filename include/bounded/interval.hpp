@@ -14,6 +14,36 @@
 
 namespace bounded {
 
+template<class T>
+concept additive_group = requires(T x, T y) {
+  x + y;
+  -x;
+  T{};
+};
+
+template<class T>
+// string, string_view
+concept concatenative_monoid = !additive_group<T> && requires(T x, T y) {
+  T{};
+  x + y;
+  x.begin();
+};
+
+template<class T>
+concept rng = requires(T x, T y) {
+  T{};
+  -x;
+  x + y;
+  x* y;
+};
+
+template<class T>
+concept ordered_rng = rng<T> && requires(T x, T y) {
+  { x <=> y } -> std::convertible_to<std::weak_ordering>;
+};
+
+template<class R>
+struct nonnan;
 namespace impl {
   // for switching
   enum class porder : char { lt = -1, eq = 0, gt = 1, un = 2 };
