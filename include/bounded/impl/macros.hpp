@@ -15,7 +15,10 @@
 #define FWD(...) (static_cast<decltype(__VA_ARGS__)&&>(__VA_ARGS__))
 // equivalent to std::forward<decltype(__VA_ARGS__)>(__VA_ARGS__)
 
-#define IMPLICIT(...) explicit(!(__VA_ARGS__))
+namespace bounded { namespace macro {
+  constexpr bool and_(auto... args) { return (args && ...); }
+}}
+#define IMPLICIT(...) explicit(!(::bounded::macro::and_(__VA_ARGS__)))
 
 /*******************
  * Accessor macros *
@@ -26,10 +29,10 @@
 #define DEFAULT_FIELD(x) HEDLEY_CONCAT(x, _)
 #define CALL(f, ...)     f(__VA_ARGS__)
 
-#define READER_(name, field)                                                  \
-  constexpr ::passing_traits::ReadOut<std::decay_t<decltype(field)>> \
-      name() const noexcept {                                                 \
-    return field;                                                             \
+#define READER_(name, field)                                                \
+  constexpr ::passing_traits::ReadOut<std::decay_t<decltype(field)>> name() \
+      const noexcept {                                                      \
+    return field;                                                           \
   }
 
 #define WRITER_(name, field)                                              \
@@ -116,25 +119,25 @@
 // simpler (no placeholder types with overloaded operators), and fits
 // better within the language (lambda captures work the same)
 namespace fn_impl {
-  template<class T>
-  /**
-   * Artificially make a value depend on a template type parameter.
-   * This prevents the compiler from eagerly evaluating a
-   * static_assert(false, ...) in template code.
-   */
-  constexpr auto depend_id(auto x) RET(x)
+template<class T>
+/**
+ * Artificially make a value depend on a template type parameter.
+ * This prevents the compiler from eagerly evaluating a
+ * static_assert(false, ...) in template code.
+ */
+constexpr auto depend_id(auto x) RET(x)
 
-      /**
-       * A dummy type that cannot be used.
-       * This is for catching arity mismatches with FN expressions
-       */
-      struct fake {
-    template<class T>
-    operator T() {
-      static_assert(depend_id<T>(false),
-                    "A FN expression was called without enough arguments");
-    }
-  };
+/**
+ * A dummy type that cannot be used.
+ * This is for catching arity mismatches with FN expressions
+ */
+struct fake {
+  template<class T>
+  operator T() {
+    static_assert(depend_id<T>(false),
+                  "A FN expression was called without enough arguments");
+  }
+};
 } // namespace bounded::fn_impl
 
 /**
@@ -146,11 +149,11 @@ namespace fn_impl {
 #define GENSYM(name) HEDLEY_CONCAT3(gensym, __COUNTER__, name)
 
 #define FN_(name, ...)                                                    \
-  <class HEDLEY_CONCAT(name, 0) = ::fn_impl::fake,               \
-   class HEDLEY_CONCAT(name, 1) = ::fn_impl::fake,               \
-   class HEDLEY_CONCAT(name, 2) = ::fn_impl::fake,               \
-   class HEDLEY_CONCAT(name, 3) = ::fn_impl::fake,               \
-   class HEDLEY_CONCAT(name, 4) = ::fn_impl::fake>(              \
+  <class HEDLEY_CONCAT(name, 0) = ::fn_impl::fake,                        \
+   class HEDLEY_CONCAT(name, 1) = ::fn_impl::fake,                        \
+   class HEDLEY_CONCAT(name, 2) = ::fn_impl::fake,                        \
+   class HEDLEY_CONCAT(name, 3) = ::fn_impl::fake,                        \
+   class HEDLEY_CONCAT(name, 4) = ::fn_impl::fake>(                       \
       [[maybe_unused]] HEDLEY_CONCAT(name, 0) _0 = {},                    \
       [[maybe_unused]] HEDLEY_CONCAT(name, 1) _1 = {},                    \
       [[maybe_unused]] HEDLEY_CONCAT(name, 2) _2 = {},                    \
@@ -170,4 +173,10 @@ namespace fn_impl {
 #define LIFT_(args, ...)                                                  \
   [](auto&&... args) { return __VA_ARGS__(FWD(args)...); }
 #define LIFT(...) LIFT_(GENSYM(args), __VA_ARGS__)
+
+#define ASSERT(...)     assert(__VA_ARGS__)
+#define ASSERT_NOEXCEPT true
+
+#define ANOEXCEPT(...)                                                    \
+  noexcept(ASSERT_NOEXCEPT && ::bounded::macro::and_(__VA_ARGS__))
 #endif // MACROS_HPP_INCLUDE_GUARD

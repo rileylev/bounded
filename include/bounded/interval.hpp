@@ -1,4 +1,5 @@
 #ifndef BOUNDED_INTERVAL_HPP_INCLUDE_GUARD
+
 #define BOUNDED_INTERVAL_HPP_INCLUDE_GUARD
 
 #include "impl/macros.hpp"
@@ -9,8 +10,6 @@
 #include <array>
 #include <algorithm>
 #include <compare>
-
-#define ASSERT(...) assert(__VA_ARGS__)
 
 namespace bounded {
 
@@ -129,9 +128,9 @@ struct nonnan : impl::nonnan_friends {
 namespace impl {
   template<class Less = std::less<>>
   constexpr auto project_less(auto proj, Less less = {}) {
-    return [ proj, less ](auto x, auto y) ARROW(less(proj(x), proj(y)));
+    return [=](auto x, auto y) ARROW(less(proj(x), proj(y)));
   }
-} // namespace impl
+}
 
 /**
  * Is it inclusive or exclusive?
@@ -166,7 +165,8 @@ namespace impl {
     friend constexpr auto operator*(end<X> x, end<Y> y)
         ARROW(end{x.point * y.point, x.clusive* y.clusive})
   };
-} // namespace impl
+}
+
 /**
  * Represents either end of an interval
  */
@@ -190,8 +190,12 @@ constexpr end<T> in(T x)NOEX(end{x, Clusive::in})
 
 using passing_traits::Read;
 
+// TODO: generalize
+// template<class Btm, class Top = Btm, class cmp = std::compare_three_way>
+// requires std::three_way_comparable_with<Btm, Top, cmp>
 template<std::three_way_comparable Poset>
 struct interval;
+
 namespace impl {
   struct interval_friends {
     friend constexpr bool
@@ -199,9 +203,8 @@ namespace impl {
     // Allow or disallow operators on intervals over different types?
     // Probably should defer to the underlying types in general
     // If it makes sense to add X + Y, it probably makes sense to add
-    // interval<X>
-    // + interval<Y> I just wish the builtins were stricter. Allowed =/=
-    // makes sense.
+    // interval<X> + interval<Y> I just wish the builtins were stricter.
+    // Allowed =/= makes sense.
     template<std::three_way_comparable X, std::three_way_comparable Y>
     friend constexpr auto
         operator==(interval<X> const& x, interval<Y> const& y)
@@ -248,9 +251,8 @@ namespace impl {
 
       std::array<end<prod_t>, 4> prods{
           // clang-format off
-                                  /* y.btm_end   ,             y.top_end */
-        /*x.btm_end*/  x.btm_end() * y.btm_end() , x.btm_end() * y.top_end(),
-        /*x.top_end*/  x.top_end() * y.btm_end() , x.top_end() * y.top_end()
+        x.btm_end() * y.btm_end()   ,   x.btm_end() * y.top_end(),
+        x.top_end() * y.btm_end()   ,   x.top_end() * y.top_end()
           // clang-format on
       };
       auto const btm_end = *std::min_element(
@@ -315,13 +317,12 @@ namespace impl {
               case porder::eq: return std::partial_ordering::less;
               default: return std::partial_ordering::unordered; ;
             }
-         default: return std::partial_ordering::unordered;
+          case porder::un: return std::partial_ordering::unordered;
         }
       }
     }
   };
-} // namespace impl
-
+}
 /**
  * Represents an interval in any `std::three_way_comparable` Poset.
  *
@@ -342,6 +343,7 @@ struct interval : impl::interval_friends {
   non-mutable and the types of all base classes and non-static data members
   are structural types or (possibly multi-dimensional) array thereof."
   */
+
   // private:
   Poset   btm_             = {};
   Poset   top_             = {};
@@ -383,7 +385,8 @@ struct interval : impl::interval_friends {
       case porder::eq:
         if((btm_clusive() == Clusive::ex) or (top_clusive() == Clusive::ex))
           *this = interval{};
-      case porder::lt: return;
+        break;
+      case porder::lt: break;
     }
   }
 
@@ -411,6 +414,9 @@ struct interval : impl::interval_friends {
         or (0 < x_btm and x_top < 0);
   }
 };
+
+template<class T>
+using nonnan_interval = interval<nonnan<T>>;
 
 } // namespace bounded
 #endif
