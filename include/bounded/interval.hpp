@@ -45,8 +45,10 @@ concept ordered_rng = rng<T> && requires(T x, T y) {
 template<class R>
 struct nonnan;
 namespace impl {
+  constexpr bool isnan(std::floating_point auto x) NOEX(x != x)
+
   // for switching
-  enum class porder : char { lt = -1, eq = 0, gt = 1, un = 2 };
+  enum class porder : char { lt, eq, gt, un };
 
   constexpr porder to_porder(std::partial_ordering x) noexcept {
     if(std::is_lt(x)) return porder::lt;
@@ -55,6 +57,76 @@ namespace impl {
     else return porder::un;
   }
 
+  constexpr std::weak_ordering assume_total(std::partial_ordering o)
+      ANOEXCEPT() {
+    switch(to_porder(o)) {
+      case porder::gt: return std::weak_ordering::greater;
+      case porder::eq: return std::weak_ordering::equivalent;
+      case porder::lt: return std::weak_ordering::less;
+      case porder::un: ASSERT(false);
+    }
+  }
+
+  struct nonnan_friends {
+    constexpr bool operator==(nonnan_friends const&) const = default;
+
+    template<class X, class Y>
+    friend constexpr auto operator<=>(nonnan<X> x, nonnan<Y> y)
+        ARROW(assume_total(x <=> y))
+    template<class X, class Y>
+    friend constexpr auto operator==(nonnan<X> x, nonnan<Y> y)
+        ARROW(x.val_ == y.val_)
+
+    template<class X, class Y>
+    friend constexpr auto operator+(nonnan<X> x, nonnan<Y> y)
+        ARROW(nonnan{x.val_ + y.val_})
+    template<class X, class Y>
+    friend constexpr auto operator*(nonnan<X> x, nonnan<Y> y)
+        ARROW(nonnan{x.val_ * y.val_})
+    template<class X, class Y>
+    friend constexpr auto operator/(nonnan<X> x, nonnan<Y> y)
+        ARROW(x.val_ / y.val_)
+  };
+}
+
+template<class R>
+struct nonnan : impl::nonnan_friends {
+  // private:
+  R val_;
+
+ public:
+  friend constexpr bool operator==(nonnan, nonnan) = default;
+  constexpr nonnan(R val) ANOEXCEPT(std::is_nothrow_move_constructible_v<R>)
+      : val_{std::move(val)} {
+    ASSERT(!impl::isnan(val));
+  }
+
+  constexpr operator R const&() const noexcept RET(val_)
+
+  constexpr auto operator+() const ARROW(nonnan{+val_})
+  constexpr auto operator-() const ARROW(nonnan{-val_})
+
+  constexpr nonnan& operator+=(auto delta) NOEX(val_ += delta, *this)
+  constexpr nonnan& operator*=(auto delta) NOEX(val_ *= delta, *this)
+  constexpr nonnan& operator-=(auto delta) NOEX(val_ -= delta, *this)
+  constexpr nonnan& operator++() NOEX(operator+=(1))
+  constexpr nonnan& operator--() NOEX(operator-=(1))
+
+  constexpr nonnan operator++(int) noexcept(
+      noexcept(++*this) && std::is_nothrow_copy_constructible_v<nonnan>) {
+    auto old = *this;
+    ++*this;
+    return old;
+  }
+  constexpr nonnan operator--(int) noexcept(
+      noexcept(--*this) && std::is_nothrow_copy_constructible_v<nonnan>) {
+    auto old = *this;
+    --*this;
+    return old;
+  }
+};
+
+namespace impl {
   template<class Less = std::less<>>
   constexpr auto project_less(auto proj, Less less = {}) {
     return [ proj, less ](auto x, auto y) ARROW(less(proj(x), proj(y)));
