@@ -208,6 +208,7 @@ namespace impl {
             ARROW(x.btm_end() == y.btm_end() and x.top_end() == y.top_end())
 
     template<std::three_way_comparable X, std::three_way_comparable Y>
+    requires additive_group<std::invoke_result_t<std::plus<>, X, Y>>
     friend constexpr auto
         operator+(interval<X> const& x, interval<Y> const& y)
             ARROW((x.empty() or y.empty())
@@ -228,6 +229,16 @@ namespace impl {
             ARROW(x + (-y))
 
     template<std::three_way_comparable X, std::three_way_comparable Y>
+    requires ordered_rng<std::invoke_result_t<std::multiplies<>, X, Y>>
+    // This algorithm relies on sorting X*Y
+    //
+    // unfortunately, enforcing this concept breaks floats.
+    // TODO: how do we deal with floats + this restriction?
+    //
+    // requires std::convertible_to<
+    //     std::compare_three_way_result_t<
+    //         std::invoke_result_t<std::multiplies<>, X, Y>>,
+    //     std::weak_ordering>
     friend constexpr auto
         operator*(interval<X> const& x, interval<Y> const& y)
             -> interval<std::invoke_result_t<std::multiplies<>, X, Y>> {
