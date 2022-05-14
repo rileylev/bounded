@@ -184,9 +184,9 @@ template<class X>
 end(X, Clusive) -> end<X>;
 
 template<class T>
-constexpr end<T> ex(T x) RET(end{x, Clusive::ex})
+constexpr end<T> ex(T x) NOEX(end{x, Clusive::ex})
 template<class T>
-constexpr end<T> in(T x)RET(end{x, Clusive::in})
+constexpr end<T> in(T x)NOEX(end{x, Clusive::in})
 
 using passing_traits::Read;
 
