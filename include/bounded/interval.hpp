@@ -73,21 +73,21 @@ namespace impl {
   struct end_friends {
     friend constexpr bool operator==(end_friends, end_friends) = default;
     template<std::three_way_comparable P>
-    friend constexpr auto operator+(end<P> x)
+    friend constexpr auto operator+(end<P> const& x)
         ARROW(end{+x.point, x.clusive})
     template<std::three_way_comparable P>
-    friend constexpr auto operator-(end<P> x)
+    friend constexpr auto operator-(end<P> const& x)
         ARROW(end{-x.point, x.clusive})
 
     template<std::three_way_comparable X, std::three_way_comparable Y>
-    friend constexpr auto operator+(end<X> x, end<Y> y)
+    friend constexpr auto operator+(end<X> const& x, end<Y> const& y)
         ARROW(end{x.point + y.point, x.clusive* y.clusive})
 
     template<std::three_way_comparable X, std::three_way_comparable Y>
-    friend constexpr auto operator-(end<X> x, end<Y> y) ARROW(x + (-y))
+    friend constexpr auto operator-(end<X> const& x, end<Y> const& y) ARROW(x + (-y))
 
     template<std::three_way_comparable X, std::three_way_comparable Y>
-    friend constexpr auto operator*(end<X> x, end<Y> y)
+    friend constexpr auto operator*(end<X> const& x, end<Y> const& y)
         ARROW(end{x.point * y.point, x.clusive* y.clusive})
   };
 }
