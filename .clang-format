@@ -36,7 +36,7 @@ NamespaceIndentation: Inner
 
 ConstructorInitializerAllOnOneLineOrOnePerLine: true
 Cpp11BracedListStyle: true
-FixNamespaceComments: true
+FixNamespaceComments: false
 IndentCaseLabels: true
 IndentGotoLabels: true
 IndentPPDirectives: AfterHash

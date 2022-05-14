@@ -17,16 +17,22 @@ namespace bounded { namespace impl {
 #define ANOEXCEPT(...) noexcept(::bounded::impl::anoexcept_(__VA_ARGS__))
 
 namespace bounded {
-template<std::three_way_comparable Poset, interval<Poset> bounds_>
+
+template<class S, class X>
+concept set_of = requires(S s, X x) {
+  { s.has(x) } -> std::convertible_to<bool>;
+};
+
+template<std::three_way_comparable Poset, set_of<Poset> auto bounds_>
 class bounded;
 
 struct bounded_friends {
 #if true
 #  define BINOP(op)                                                         \
     template<std::three_way_comparable P0,                                  \
-             interval<P0>              i0,                                  \
+             auto                      i0,                                  \
              std::three_way_comparable P1,                                  \
-             interval<P1>              i1>                                  \
+             auto                      i1>                                  \
     friend auto constexpr operator op(bounded<P0, i0> x, bounded<P1, i1> y) \
         ARROW(bounded<decltype(x.get() op y.get()), i0 op i1>{              \
             x.get() op y.get()})
@@ -37,12 +43,16 @@ struct bounded_friends {
 #endif
 };
 
-template<std::three_way_comparable Poset, interval<Poset> bounds_>
+template<std::three_way_comparable Poset, set_of<Poset> auto bounds_>
 class bounded : bounded_friends {
   Poset x_;
 
  public:
   static constexpr interval<Poset> bounds = bounds_;
+  // TODO: is this the right test?
+  // should we just let you default construct in an invalid state so you
+  // can assign later?
+  constexpr bounded() requires(bounds_.has(Poset{})) = default;
   constexpr bounded(Poset x) ANOEXCEPT() : x_{x} { ASSERT(bounds.has(x)); }
 
   constexpr ReadOut<Poset> get() {
@@ -51,6 +61,8 @@ class bounded : bounded_friends {
   }
 
   constexpr auto operator-() ARROW(bounded<Poset, -bounds>{-get()})
+
+  constexpr operator Poset const&() noexcept RET(x_)
 };
 } // namespace bounded
 #endif
