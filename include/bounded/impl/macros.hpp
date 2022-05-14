@@ -174,9 +174,11 @@ struct fake {
   [](auto&&... args) { return __VA_ARGS__(FWD(args)...); }
 #define LIFT(...) LIFT_(GENSYM(args), __VA_ARGS__)
 
-#define ASSERT(...)     assert(__VA_ARGS__)
-#define ASSERT_NOEXCEPT true
+#include <assert.h>
+
+#define ASSERT(...)        assert(__VA_ARGS__)
+#define IS_ASSERT_NOEXCEPT true
 
 #define ANOEXCEPT(...)                                                    \
-  noexcept(ASSERT_NOEXCEPT && ::bounded::macro::and_(__VA_ARGS__))
+  noexcept(IS_ASSERT_NOEXCEPT && ::bounded::macro::and_(__VA_ARGS__))
 #endif // MACROS_HPP_INCLUDE_GUARD

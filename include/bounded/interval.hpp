@@ -4,7 +4,6 @@
 
 #include "impl/macros.hpp"
 
-#include <assert.h>
 #include <concepts>
 #include <tuple>
 #include <array>
@@ -36,16 +35,12 @@ concept rng = requires(T x, T y) {
   x* y;
 };
 
-template<class T>
-concept ordered_rng = rng<T> && requires(T x, T y) {
-  { x <=> y } -> std::convertible_to<std::weak_ordering>;
+template<class T, class Cmp>
+concept ordered_rng_with = rng<T> && requires(T x, T y, Cmp cmp) {
+  { cmp(x, y) } -> std::convertible_to<std::weak_ordering>;
 };
 
-template<class R>
-struct nonnan;
 namespace impl {
-  constexpr bool isnan(std::floating_point auto x) NOEX(x != x)
-
   // for switching
   enum class porder : char { lt, eq, gt, un };
 
@@ -56,76 +51,6 @@ namespace impl {
     else return porder::un;
   }
 
-  constexpr std::weak_ordering assume_total(std::partial_ordering o)
-      ANOEXCEPT() {
-    switch(to_porder(o)) {
-      case porder::gt: return std::weak_ordering::greater;
-      case porder::eq: return std::weak_ordering::equivalent;
-      case porder::lt: return std::weak_ordering::less;
-      case porder::un: ASSERT(false);
-    }
-  }
-
-  struct nonnan_friends {
-    constexpr bool operator==(nonnan_friends const&) const = default;
-
-    template<class X, class Y>
-    friend constexpr auto operator<=>(nonnan<X> x, nonnan<Y> y)
-        ARROW(assume_total(x <=> y))
-    template<class X, class Y>
-    friend constexpr auto operator==(nonnan<X> x, nonnan<Y> y)
-        ARROW(x.val_ == y.val_)
-
-    template<class X, class Y>
-    friend constexpr auto operator+(nonnan<X> x, nonnan<Y> y)
-        ARROW(nonnan{x.val_ + y.val_})
-    template<class X, class Y>
-    friend constexpr auto operator*(nonnan<X> x, nonnan<Y> y)
-        ARROW(nonnan{x.val_ * y.val_})
-    template<class X, class Y>
-    friend constexpr auto operator/(nonnan<X> x, nonnan<Y> y)
-        ARROW(x.val_ / y.val_)
-  };
-}
-
-template<class R>
-struct nonnan : impl::nonnan_friends {
-  // private:
-  R val_;
-
- public:
-  friend constexpr bool operator==(nonnan, nonnan) = default;
-  constexpr nonnan(R val) ANOEXCEPT(std::is_nothrow_move_constructible_v<R>)
-      : val_{std::move(val)} {
-    ASSERT(!impl::isnan(val));
-  }
-
-  constexpr operator R const&() const noexcept RET(val_)
-
-  constexpr auto operator+() const ARROW(nonnan{+val_})
-  constexpr auto operator-() const ARROW(nonnan{-val_})
-
-  constexpr nonnan& operator+=(auto delta) NOEX(val_ += delta, *this)
-  constexpr nonnan& operator*=(auto delta) NOEX(val_ *= delta, *this)
-  constexpr nonnan& operator-=(auto delta) NOEX(val_ -= delta, *this)
-  constexpr nonnan& operator++() NOEX(operator+=(1))
-  constexpr nonnan& operator--() NOEX(operator-=(1))
-
-  constexpr nonnan operator++(int) noexcept(
-      noexcept(++*this) && std::is_nothrow_copy_constructible_v<nonnan>) {
-    auto old = *this;
-    ++*this;
-    return old;
-  }
-  constexpr nonnan operator--(int) noexcept(
-      noexcept(--*this) && std::is_nothrow_copy_constructible_v<nonnan>) {
-    auto old = *this;
-    --*this;
-    return old;
-  }
-};
-
-namespace impl {
   template<class Less = std::less<>>
   constexpr auto project_less(auto proj, Less less = {}) {
     return [=](auto x, auto y) ARROW(less(proj(x), proj(y)));
@@ -188,73 +113,87 @@ constexpr end<T> ex(T x) NOEX(end{x, Clusive::ex})
 template<class T>
 constexpr end<T> in(T x)NOEX(end{x, Clusive::in})
 
-using passing_traits::Read;
+template<class X, class Y, class Cmp>
+concept comparable_by = requires(X x, Y y, Cmp cmp) {
+  { cmp(x, y) } -> std::convertible_to<std::partial_ordering>;
+};
 
-// TODO: generalize
-// template<class Btm, class Top = Btm, class cmp = std::compare_three_way>
-// requires std::three_way_comparable_with<Btm, Top, cmp>
-template<std::three_way_comparable Poset>
+template<class Btm, class Top = Btm, class Cmp = std::compare_three_way>
+requires comparable_by<Btm, Top, Cmp>
 struct interval;
 
 namespace impl {
+  auto const end_cmp = [](Clusive target) //
+      RET([=]<class Cmp>(auto xend, auto yend, Cmp cmp = {}) {
+        auto const ptcmp = cmp(xend.point, yend.point);
+        return (ptcmp == 0)
+                 ? ((xend.clusive == target) <=> (yend.clusive == target))
+                 : ptcmp;
+      });
+  inline constexpr auto const btm_cmp = end_cmp(Clusive::ex);
+  inline constexpr auto const top_cmp = end_cmp(Clusive::in);
+
   struct interval_friends {
     friend constexpr bool
         operator==(interval_friends, interval_friends) = default;
-    // Allow or disallow operators on intervals over different types?
-    // Probably should defer to the underlying types in general
-    // If it makes sense to add X + Y, it probably makes sense to add
-    // interval<X> + interval<Y> I just wish the builtins were stricter.
-    // Allowed =/= makes sense.
-    template<std::three_way_comparable X, std::three_way_comparable Y>
+    friend constexpr auto operator==(auto const& x, auto const& y)
+        ARROW(x.btm_end() == y.btm_end() and x.top_end() == y.top_end())
+
+   private:
+    using plus = decltype([](auto... args) RET((args + ...)));
+
+   public:
+    template<class Xbtm, class Xtop, class Ybtm, class Ytop, class Cmp>
+    requires std::is_empty_v<Cmp> and
+        // TODO: is this the correct constraint?
+        additive_group<std::invoke_result_t<plus, Xbtm, Xtop, Ybtm, Ytop>>
+    friend constexpr auto operator+(interval<Xbtm, Xtop, Cmp> const& x,
+                                    interval<Ybtm, Ytop, Cmp> const& y)
+        ARROW((x.empty() or y.empty())
+                  ? interval<std::invoke_result_t<std::plus<>, Xbtm, Ybtm>,
+                             std::invoke_result_t<std::plus<>, Xtop, Ytop>,
+                             Cmp>{}
+                  : interval{x.btm_end() + y.btm_end(),
+                             x.top_end() + y.top_end(),
+                             Cmp{}})
+
+    friend constexpr auto operator-(auto const& x)
+        ARROW(interval{-x.top_end(), -x.btm_end(), x.cmp()})
+    friend constexpr auto operator+(auto const& x)
+        ARROW(interval{+x.btm_end(), +x.top_end(), x.cmp()})
+
+    friend constexpr auto operator-(auto const& x, auto const& y)
+        ARROW(x + (-y))
+
+   private:
+    template<class X, class Y>
+    using cross_product_t = decltype([](X x, Y y) {
+      // clang-format off
+      return x.btm() * y.btm() + x.top() * y.btm()
+           + x.btm() * y.top() + x.top() * y.top();
+      // clang-format on
+    }({}, {}));
+    template<class X, class Y, class Cmp>
+    using product_interval_t =
+        interval<cross_product_t<X, Y>, cross_product_t<X, Y>, Cmp>;
+
+   public:
+    template<class Xbtm, class Xtop, class Ybtm, class Ytop, class Cmp>
     friend constexpr auto
-        operator==(interval<X> const& x, interval<Y> const& y)
-            ARROW(x.btm_end() == y.btm_end() and x.top_end() == y.top_end())
-
-    template<std::three_way_comparable X, std::three_way_comparable Y>
-    requires additive_group<std::invoke_result_t<std::plus<>, X, Y>>
-    friend constexpr auto
-        operator+(interval<X> const& x, interval<Y> const& y)
-            ARROW((x.empty() or y.empty())
-                      ? interval<std::invoke_result_t<std::plus<>, X, Y>>{}
-                      : interval{x.btm_end() + y.btm_end(),
-                                 x.top_end() + y.top_end()})
-
-    template<std::three_way_comparable X>
-    friend constexpr auto operator-(interval<X> const& x)
-        ARROW(interval{-x.top_end(), -x.btm_end()})
-    template<std::three_way_comparable X>
-    friend constexpr auto operator+(interval<X> const& x)
-        ARROW(interval{+x.btm_end(), +x.top_end()})
-
-    template<std::three_way_comparable X, std::three_way_comparable Y>
-    friend constexpr auto
-        operator-(interval<X> const& x, interval<Y> const& y)
-            ARROW(x + (-y))
-
-    template<std::three_way_comparable X, std::three_way_comparable Y>
-    requires ordered_rng<std::invoke_result_t<std::multiplies<>, X, Y>>
-    // This algorithm relies on sorting X*Y
-    //
-    // unfortunately, enforcing this concept breaks floats.
-    // TODO: how do we deal with floats + this restriction?
-    //
-    // requires std::convertible_to<
-    //     std::compare_three_way_result_t<
-    //         std::invoke_result_t<std::multiplies<>, X, Y>>,
-    //     std::weak_ordering>
-    friend constexpr auto
-        operator*(interval<X> const& x, interval<Y> const& y)
-            -> interval<std::invoke_result_t<std::multiplies<>, X, Y>> {
-      using prod_t = decltype(std::declval<X>() * std::declval<Y>());
-
+        operator*(interval<Xbtm, Xtop, Cmp> const& x,
+                  interval<Ybtm, Ytop, Cmp> const& y)
+            -> product_interval_t<decltype(x), decltype(y), Cmp> {
       if(x.empty() or y.empty()) return {};
 
-      std::array<end<prod_t>, 4> prods{
+      auto const common_array = [](auto... xs)
+          RET(std::array{std::common_type_t<decltype(xs)...>{xs}...});
+
+      auto prods = common_array(
           // clang-format off
         x.btm_end() * y.btm_end()   ,   x.btm_end() * y.top_end(),
         x.top_end() * y.btm_end()   ,   x.top_end() * y.top_end()
           // clang-format on
-      };
+      );
       auto const btm_end = *std::min_element(
           prods.begin(),
           prods.end(),
@@ -281,13 +220,13 @@ namespace impl {
      *  [0,1) <=> (0,1] = unordered
      */
     // TODO: what does weak equivalence mean for subset inclusion?
-    template<class X, class Y>
+    template<class Xbtm, class Xtop, class Ybtm, class Ytop, class Cmp>
+    requires std::is_empty_v<Cmp>
     friend constexpr std::partial_ordering
-        operator<=>(interval<X> const& x_, interval<Y> const& y_) {
+        operator<=>(interval<Xbtm, Xtop, Cmp> const& x,
+                    interval<Ybtm, Ytop, Cmp> const& y) {
       // next best thing to inferring to pass by value (the compiler didn't
       // like that)
-      Read<interval<X>> x = x_;
-      Read<interval<Y>> y = y_;
       if(x.empty())
         return (y.empty()) ? std::partial_ordering::equivalent
                            : std::partial_ordering::less;
@@ -295,13 +234,9 @@ namespace impl {
       else {
         // clusivity breaks ties
         // [0,1) vs (0,1) --- the exclusive interval starts a hair higher
-        auto const btms =
-            std::pair{x.btm(), x.btm_clusive() == Clusive::ex}
-            <=> std::pair{y.btm(), y.btm_clusive() == Clusive::ex};
+        auto const btms = btm_cmp(x.btm_end(), y.btm_end(), Cmp{});
         // [0,1) vs [0,1] --- the inclusive interval ends a hair higher
-        auto const tops =
-            std::pair{x.top(), x.top_clusive() == Clusive::in}
-            <=> std::pair{y.top(), y.top_clusive() == Clusive::in};
+        auto const tops = top_cmp(x.top_end(), y.top_end(), Cmp{});
         using namespace impl;
         switch(to_porder(btms)) {
           case porder::lt:
@@ -329,7 +264,8 @@ namespace impl {
  * This is a structural type so it can be used as a non-type template
  * parameter. A name ending with a trailing underscore is morally private.
  */
-template<std::three_way_comparable Poset>
+template<class Btm, class Top, class Cmp>
+requires comparable_by<Btm, Top, Cmp>
 struct interval : impl::interval_friends {
   /* To use this as a non-type template parameter, we can't use private.
 
@@ -345,16 +281,18 @@ struct interval : impl::interval_friends {
   */
 
   // private:
-  Poset   btm_             = {};
-  Poset   top_             = {};
-  Clusive btm_clusive_ : 1 = Clusive::ex;
-  Clusive top_clusive_ : 1 = Clusive::ex;
+  Btm                       btm_             = {};
+  Top                       top_             = {};
+  Clusive                   btm_clusive_ : 1 = Clusive::ex;
+  Clusive                   top_clusive_ : 1 = Clusive::ex;
+  [[no_unique_address]] Cmp cmp_             = {};
 
  public:
   READER(btm)
   READER(top)
   READER(btm_clusive)
   READER(top_clusive)
+  READER(cmp)
 
   constexpr auto btm_end() const ARROW(end{btm(), btm_clusive()})
   constexpr auto top_end() const ARROW(end{top(), top_clusive()})
@@ -364,22 +302,28 @@ struct interval : impl::interval_friends {
    */
   constexpr interval() = default;
 
-  constexpr bool empty() const NOEX(*this == interval{})
+  constexpr bool empty() const ANOEXCEPT(noexcept(*this == interval{})) {
+    // what does empty mean if we don't default construct an empty?
+    ASSERT(cmp_(Btm{}, Top{}) == 0);
+    return *this == interval{};
+  }
 
   /**
    * Construct an interval from its two ends
    */
-  constexpr interval(end<Poset> btm, end<Poset> top) noexcept(
-      std::is_nothrow_move_constructible_v<Poset>and noexcept(
-          interval{},
-          this->btm() <=> this->top()))
+  constexpr interval(end<Btm> btm, end<Top> top, Cmp cmp = {}) noexcept(
+      std::is_nothrow_move_constructible_v<Btm>and
+              std::is_nothrow_move_constructible_v<Top>and
+              std::is_nothrow_default_constructible_v<interval>and noexcept(
+                  cmp_(this->btm(), this->top())))
       : btm_{std::move(btm.point)},
         top_{std::move(top.point)},
         btm_clusive_{btm.clusive},
-        top_clusive_{top.clusive} {
-    // normalize the degenerate cases
+        top_clusive_{top.clusive},
+        cmp_{std::move(cmp)} {
     using namespace impl;
-    switch(to_porder(this->btm() <=> this->top())) {
+    // normalize the degenerate cases
+    switch(to_porder(cmp_(this->btm(), this->top()))) {
       case porder::gt:
       case porder::un: *this = interval{}; break;
       case porder::eq:
@@ -391,19 +335,12 @@ struct interval : impl::interval_friends {
   }
 
   /**
-   * Singleton constructor
-   *
-   * TODO: implicit? explicit?
-   */
-  IMPLICIT() constexpr interval(Poset x) : interval(in(x), in(x)) {}
-
-  /**
    * Does this interval contain x? x∈*this?
    */
   constexpr bool
-      has(Read<Poset> x) noexcept(noexcept(x <=> btm(), x <=> top())) {
-    auto const x_btm = x <=> btm();
-    auto const x_top = x <=> top();
+      has(auto const& x) noexcept(noexcept(cmp_(x, btm()), cmp_(x, top()))) {
+    auto const x_btm = cmp_(x, btm());
+    auto const x_top = cmp_(x, top());
 
     if(x_btm == std::partial_ordering::unordered
        or x_top == std::partial_ordering::unordered)
@@ -415,8 +352,20 @@ struct interval : impl::interval_friends {
   }
 };
 
-template<class T>
-using nonnan_interval = interval<nonnan<T>>;
+// for comparing floats
+constexpr std::weak_ordering assume_total(std::partial_ordering o)
+    ANOEXCEPT() {
+  using namespace impl;
+  switch(to_porder(o)) {
+    case porder::gt: return std::weak_ordering::greater;
+    case porder::eq: return std::weak_ordering::equivalent;
+    case porder::lt: return std::weak_ordering::less;
+    case porder::un: ASSERT(false);
+  }
+}
 
+template<class Cmp = std::compare_three_way>
+inline constexpr auto assume_total_cmp(Cmp cmp = {})
+    NOEX([cmp](auto x, auto y) ARROW(assume_total(x, y)))
 } // namespace bounded
 #endif

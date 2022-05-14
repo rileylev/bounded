@@ -76,7 +76,7 @@ TEST_CASE("The innards are inside but the outsides are not") {
 }
 
 TEST_CASE("The empty interval annihilates under +") {
-  STATIC_REQUIRE((interval<int>{} + interval{ex(0), ex(1)}).empty());
+  STATIC_REQUIRE((bounded::interval<int>{} + interval{ex(0), ex(1)}).empty());
 }
 TEST_CASE("The empty interval annihilates under *") {
   STATIC_REQUIRE((interval<int>{} * interval{ex(0), ex(1)}).empty());
