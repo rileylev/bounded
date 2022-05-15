@@ -184,8 +184,11 @@ namespace impl {
     friend constexpr auto
         operator*(interval<Xbtm, Xtop, Cmp> const& x,
                   interval<Ybtm, Ytop, Cmp> const& y)
-            -> product_interval_t<decltype(x), decltype(y), Cmp> {
+            -> product_interval_t<decltype(x), decltype(y), Cmp>
+    requires std::is_empty_v<Cmp> && rng<
+        cross_product_t<decltype(x), decltype(y)>> {
       if(x.empty() or y.empty()) return {};
+      Cmp cmp{};
 
       auto const common_array = [](auto... xs)
           RET(std::array{std::common_type_t<decltype(xs)...>{xs}...});
@@ -196,15 +199,18 @@ namespace impl {
         x.top_end() * y.btm_end()   ,   x.top_end() * y.top_end()
           // clang-format on
       );
-      auto const btm_end = *std::min_element(
-          prods.begin(),
-          prods.end(),
-          impl::project_less(
-              [] FN(std::pair{_.point, _.clusive == Clusive::ex})));
-      auto const top_end = *std::max_element(
-          prods.begin(),
-          prods.end(),
-          project_less([] FN(std::pair{_.point, _.clusive == Clusive::in})));
+
+      constexpr auto lt = comp(LIFT(std::is_lt), assume_total);
+      // This is what std does if you sort NaNs.
+      // TODO: is it better to be stricter?
+      auto const btm_end =
+          *std::min_element(prods.begin(),
+                            prods.end(),
+                            comp(lt, btm_cmp(cmp)));
+      auto const top_end =
+          *std::max_element(prods.begin(),
+                            prods.end(),
+                            comp(lt, top_cmp(cmp)));
       return interval{btm_end, top_end};
     }
     // tricky cases [-1,1) * [-1,1] = [-1,1]
