@@ -123,13 +123,15 @@ requires comparable_by<Btm, Top, Cmp>
 struct interval;
 
 namespace impl {
-  auto const end_cmp = [](Clusive target) //
-      RET([=]<class Cmp>(auto xend, auto yend, Cmp cmp = {}) {
-        auto const ptcmp = cmp(xend.point, yend.point);
-        return (ptcmp == 0)
-                 ? ((xend.clusive == target) <=> (yend.clusive == target))
-                 : ptcmp;
-      });
+  inline constexpr auto end_cmp = [](Clusive target) //
+      RET([=]<class Cmp>(Cmp cmp = {})               //
+          RET([=](auto xend, auto yend) {
+            auto const ptcmp = cmp(xend.point, yend.point);
+            return (ptcmp == 0)
+                     ? ((xend.clusive == target)
+                        <=> (yend.clusive == target))
+                     : ptcmp;
+          }));
   inline constexpr auto const btm_cmp = end_cmp(Clusive::ex);
   inline constexpr auto const top_cmp = end_cmp(Clusive::in);
 
@@ -225,35 +227,31 @@ namespace impl {
     friend constexpr std::partial_ordering
         operator<=>(interval<Xbtm, Xtop, Cmp> const& x,
                     interval<Ybtm, Ytop, Cmp> const& y) {
-      // next best thing to inferring to pass by value (the compiler didn't
-      // like that)
-      if(x.empty())
-        return (y.empty()) ? std::partial_ordering::equivalent
-                           : std::partial_ordering::less;
-      else if(y.empty()) return std::partial_ordering::greater;
-      else {
-        // clusivity breaks ties
-        // [0,1) vs (0,1) --- the exclusive interval starts a hair higher
-        auto const btms = btm_cmp(x.btm_end(), y.btm_end(), Cmp{});
-        // [0,1) vs [0,1] --- the inclusive interval ends a hair higher
-        auto const tops = top_cmp(x.top_end(), y.top_end(), Cmp{});
-        using namespace impl;
-        switch(to_porder(btms)) {
-          case porder::lt:
-            switch(to_porder(tops)) {
-              case porder::gt:
-              case porder::eq: return std::partial_ordering::greater;
-              default: return std::partial_ordering::unordered;
-            }
-          case porder::eq: return tops;
-          case porder::gt:
-            switch(to_porder(tops)) {
-              case porder::lt:
-              case porder::eq: return std::partial_ordering::less;
-              default: return std::partial_ordering::unordered; ;
-            }
-          case porder::un: return std::partial_ordering::unordered;
-        }
+      switch(x.empty() << 1 | y.empty()) {
+        case 0b11: return std::partial_ordering::equivalent;
+        case 0b10: return std::partial_ordering::less;
+        case 0b01: return std::partial_ordering::greater;
+        default:
+          Cmp const cmp{};
+          auto const btms = btm_cmp(cmp)(x.btm_end(), y.btm_end());
+          auto const tops = top_cmp(cmp)(x.top_end(), y.top_end());
+          using namespace impl;
+          switch(to_porder(btms)) {
+            case porder::lt:
+              switch(to_porder(tops)) {
+                case porder::gt:
+                case porder::eq: return std::partial_ordering::greater;
+                default: return std::partial_ordering::unordered;
+              }
+            case porder::eq: return tops;
+            case porder::gt:
+              switch(to_porder(tops)) {
+                case porder::lt:
+                case porder::eq: return std::partial_ordering::less;
+                default: return std::partial_ordering::unordered; ;
+              }
+            case porder::un: return std::partial_ordering::unordered;
+          }
       }
     }
   };
