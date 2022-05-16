@@ -35,11 +35,6 @@ concept rng = requires(T x, T y) {
   x* y;
 };
 
-template<class T, class Cmp>
-concept ordered_rng_with = rng<T> && requires(T x, T y, Cmp cmp) {
-  { cmp(x, y) } -> std::convertible_to<std::weak_ordering>;
-};
-
 namespace impl {
   /**
    *  Ands all its arguments together
@@ -130,14 +125,28 @@ struct end : impl::end_friends {
   friend bool operator==(end, end) = default;
 
   constexpr end() = default;
-  constexpr end(Poset point_, Clusive clusive_)
-      : point{point_}, clusive{clusive_} {}
-};
-template<class X>
-end(X, Clusive) -> end<X>;
+  constexpr end(Poset point_, Clusive clusive_) //
+      noexcept(std::is_nothrow_move_constructible_v<Poset>)
+      : point{std::move(point_)}, clusive{clusive_} {}
 
+  template<class P>
+  requires std::constructible_from<Poset, P>
+      IMPLICIT(std::convertible_to<P, Poset>)
+  constexpr end(end<P> x) NOEX_CONS(end(static_cast<Poset>(x.point))) {}
+};
+
+template<class... Ps>
+constexpr auto map(auto f, end<Ps>... es)
+    ARROW(end{f(es.point...), (es.clusive * ...)})
+
+/**
+ * Create an EXclusive end
+ */
 template<class T>
 constexpr end<T> ex(T x) NOEX(end{x, Clusive::ex})
+/**
+ * Create an INclusive end
+ */
 template<class T>
 constexpr end<T> in(T x)NOEX(end{x, Clusive::in})
 
@@ -255,7 +264,6 @@ namespace impl {
      *  [0,1]  <  [0,2]
      *  [0,1) <=> (0,1] = unordered
      */
-    // TODO: what does weak equivalence mean for subset inclusion?
     template<class Xbtm, class Xtop, class Ybtm, class Ytop, class Cmp>
     requires std::is_empty_v<Cmp>
     friend constexpr std::partial_ordering
@@ -288,8 +296,31 @@ namespace impl {
           }
       }
     }
+
+   private:
+    template<std::size_t N>
+    constexpr auto get(auto const& x) {
+      if constexpr(N == 0) return x.btm_end();
+      else return x.top_end();
+    }
   };
 }
+}
+namespace std {
+template<class Btm, class Top, class Cmp>
+struct tuple_size<bounded::interval<Btm, Top, Cmp>>
+    : std::integral_constant<std::size_t, 2> {};
+template<class Btm, class Top, class Cmp>
+struct tuple_element<0, bounded::interval<Btm, Top, Cmp>> {
+  using type = bounded::end<Btm>;
+};
+template<class Btm, class Top, class Cmp>
+struct tuple_element<1, bounded::interval<Btm, Top, Cmp>> {
+  using type = bounded::end<Top>;
+};
+}
+namespace bounded {
+
 /**
  * Represents an interval in any `std::three_way_comparable' Poset.
  *
@@ -338,6 +369,7 @@ struct interval : impl::interval_friends {
     ASSERT(cmp_(Btm{}, Top{}) == 0); // an empty interval has no elements
     return *this == interval{};
   }
+  constexpr operator bool() NOEX(empty())
 
   /**
    * Construct an interval from its two ends
@@ -365,6 +397,18 @@ struct interval : impl::interval_friends {
     }
   }
 
+  template<class B, class T, class C>
+  requires std::constructible_from<Btm, B> //
+      and std::constructible_from<Top, T>  //
+      and std::constructible_from<Cmp, C>
+      IMPLICIT(impl::and_(std::convertible_to<B, Btm>,
+                          std::convertible_to<T, Top>,
+                          std::convertible_to<C, Cmp>))
+  constexpr interval(interval<B, T, C> const& x)
+      : interval(static_cast<Btm>(x.btm_end()),
+                 static_cast<Top>(x.top_end()),
+                 static_cast<Cmp>(x.cmp)) {}
+
   /**
    * Does this interval contain x? x∈*this?
    */
@@ -385,20 +429,26 @@ struct interval : impl::interval_friends {
   }
 };
 
-// for comparing floats
-constexpr std::weak_ordering assume_total(std::partial_ordering o)
-    ANOEXCEPT() {
-  using namespace impl;
-  switch(to_porder(o)) {
-    case porder::gt: return std::weak_ordering::greater;
-    case porder::eq: return std::weak_ordering::equivalent;
-    case porder::lt: return std::weak_ordering::less;
-    case porder::un: ASSERT(false);
-  }
+constexpr auto map_order_preserving(auto f, auto... is)
+    ARROW((!is.empty() && ...)
+              ? decltype(interval{map(f, is.btm_end()...),
+                                  map(f, is.top_end()...)}){}
+              : interval{map(f, is.btm_end()...), map(f, is.top_end()...)})
+constexpr auto map_order_reversing(auto f, auto... is)
+    ARROW((!is.empty() && ...)
+              ? decltype(interval{map(f, is.top_end()...),
+                                  map(f, is.btm_end()...)}){}
+              : interval{map(f, is.top_end()...), map(f, is.btm_end()...)})
+namespace impl {
+  // TODO: clearer name
+  constexpr auto or_(auto x, auto y) ARROW(x ? x : y)
 }
+constexpr auto map_monotonic(auto f, auto... is)
+    ARROW(impl::or_(map_order_preserving(f, is...),
+                    map_order_reversing(f, is...)))
 
-template<class Cmp = std::compare_three_way>
-inline constexpr auto assume_total_cmp(Cmp cmp = {})
-    NOEX([cmp](auto x, auto y) ARROW(assume_total(x, y)))
+template<class T>
+inline constexpr auto finites =
+    interval{std::numeric_limits<T>::lowest, std::numeric_limits<T>::max};
 } // namespace bounded
 #endif
