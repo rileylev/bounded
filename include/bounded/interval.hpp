@@ -11,7 +11,12 @@
 #include <compare>
 
 namespace bounded {
-
+/**
+ * Does a type look like an additive group?
+ *
+ * In this library, this concept is used to prevent us from trying to add
+ * intervals of strings as if they were numbers.
+ */
 template<class T>
 concept additive_group = requires(T x, T y) {
   x + y;
@@ -19,14 +24,9 @@ concept additive_group = requires(T x, T y) {
   T{};
 };
 
-template<class T>
-// string, string_view
-concept concatenative_monoid = !additive_group<T> && requires(T x, T y) {
-  T{};
-  x + y;
-  x.begin();
-};
-
+/**
+ * Does the type look like a rng (ring without identity)
+ */
 template<class T>
 concept rng = requires(T x, T y) {
   T{};
