@@ -41,7 +41,24 @@ concept ordered_rng_with = rng<T> && requires(T x, T y, Cmp cmp) {
 };
 
 namespace impl {
-  // for switching
+  /**
+   *  Ands all its arguments together
+   *
+   *  To appease clang-format
+   */
+  inline constexpr auto and_(auto... xs) RET((xs && ...))
+
+  inline constexpr auto is_un = [](std::partial_ordering o)
+      ARROW(o == std::partial_ordering::unordered);
+  /**
+   * Compose two functions
+   */
+  inline constexpr auto compose =
+      [](auto f, auto g) RET([=](auto&&... args) RET(f(g(FWD(args)...))));
+
+  /**
+   *  A partial order enum for use with switch/case
+   */
   enum class porder : char { lt, eq, gt, un };
 
   constexpr porder to_porder(std::partial_ordering x) noexcept {
@@ -51,10 +68,20 @@ namespace impl {
     else return porder::un;
   }
 
-  template<class Less = std::less<>>
-  constexpr auto project_less(auto proj, Less less = {}) {
-    return [=](auto x, auto y) ARROW(less(proj(x), proj(y)));
-  }
+  /**
+   * Convert a partial_ordering to a total_ordering with precondition
+   * it is only defined on totally-ordered subsets
+   */
+  inline constexpr auto assume_total =
+      [](std::partial_ordering o) ANOEXCEPT() -> std::weak_ordering {
+    using namespace impl;
+    switch(to_porder(o)) {
+      case porder::gt: return std::weak_ordering::greater;
+      case porder::eq: return std::weak_ordering::equivalent;
+      case porder::lt: return std::weak_ordering::less;
+      case porder::un: ASSERT(false);
+    };
+  };
 }
 
 /**
