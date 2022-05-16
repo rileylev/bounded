@@ -111,7 +111,8 @@ namespace impl {
         ARROW(end{x.point + y.point, x.clusive* y.clusive})
 
     template<std::three_way_comparable X, std::three_way_comparable Y>
-    friend constexpr auto operator-(end<X> const& x, end<Y> const& y) ARROW(x + (-y))
+    friend constexpr auto operator-(end<X> const& x, end<Y> const& y)
+        ARROW(x + (-y))
 
     template<std::three_way_comparable X, std::three_way_comparable Y>
     friend constexpr auto operator*(end<X> const& x, end<Y> const& y)
@@ -151,7 +152,7 @@ struct interval;
 
 namespace impl {
   inline constexpr auto end_cmp = [](Clusive target) //
-      RET([=]<class Cmp>(Cmp cmp = {})               //
+      RET([=](auto cmp)                              //
           RET([=](auto xend, auto yend) {
             auto const ptcmp = cmp(xend.point, yend.point);
             return (ptcmp == 0)
@@ -173,9 +174,8 @@ namespace impl {
 
    public:
     template<class Xbtm, class Xtop, class Ybtm, class Ytop, class Cmp>
-    requires std::is_empty_v<Cmp> and
-        // TODO: is this the correct constraint?
-        additive_group<std::invoke_result_t<plus, Xbtm, Xtop, Ybtm, Ytop>>
+    requires std::is_empty_v<Cmp> //
+        and additive_group<std::invoke_result_t<plus, Xbtm, Xtop, Ybtm, Ytop>>
     friend constexpr auto operator+(interval<Xbtm, Xtop, Cmp> const& x,
                                     interval<Ybtm, Ytop, Cmp> const& y)
         ARROW((x.empty() or y.empty())
@@ -196,12 +196,13 @@ namespace impl {
 
    private:
     template<class X, class Y>
-    using cross_product_t = decltype([](X x, Y y) {
-      // clang-format off
-      return x.btm() * y.btm() + x.top() * y.btm()
-           + x.btm() * y.top() + x.top() * y.top();
-      // clang-format on
-    }({}, {}));
+    using cross_product_t =
+        std::invoke_result_t<decltype([](X x, Y y) {
+                               return x.btm() * y.btm() + x.top() * y.btm()
+                                    + x.btm() * y.top() + x.top() * y.top();
+                             }),
+                             X,
+                             Y>;
     template<class X, class Y, class Cmp>
     using product_interval_t =
         interval<cross_product_t<X, Y>, cross_product_t<X, Y>, Cmp>;
@@ -212,32 +213,32 @@ namespace impl {
         operator*(interval<Xbtm, Xtop, Cmp> const& x,
                   interval<Ybtm, Ytop, Cmp> const& y)
             -> product_interval_t<decltype(x), decltype(y), Cmp>
-    requires std::is_empty_v<Cmp> && rng<
-        cross_product_t<decltype(x), decltype(y)>> {
+    requires std::is_empty_v<Cmp> //
+        and rng<cross_product_t<decltype(x), decltype(y)>> {
       if(x.empty() or y.empty()) return {};
       Cmp cmp{};
 
       auto const common_array = [](auto... xs)
           RET(std::array{std::common_type_t<decltype(xs)...>{xs}...});
 
-      auto prods = common_array(
+      auto const prods = common_array(
           // clang-format off
         x.btm_end() * y.btm_end()   ,   x.btm_end() * y.top_end(),
         x.top_end() * y.btm_end()   ,   x.top_end() * y.top_end()
           // clang-format on
       );
 
-      constexpr auto lt = comp(LIFT(std::is_lt), assume_total);
+      constexpr auto lt = compose(LIFT(std::is_lt), assume_total);
       // This is what std does if you sort NaNs.
       // TODO: is it better to be stricter?
       auto const btm_end =
           *std::min_element(prods.begin(),
                             prods.end(),
-                            comp(lt, btm_cmp(cmp)));
+                            compose(lt, btm_cmp(cmp)));
       auto const top_end =
           *std::max_element(prods.begin(),
                             prods.end(),
-                            comp(lt, top_cmp(cmp)));
+                            compose(lt, top_cmp(cmp)));
       return interval{btm_end, top_end};
     }
     // tricky cases [-1,1) * [-1,1] = [-1,1]
@@ -265,7 +266,7 @@ namespace impl {
         case 0b10: return std::partial_ordering::less;
         case 0b01: return std::partial_ordering::greater;
         default:
-          Cmp const cmp{};
+          Cmp const  cmp{};
           auto const btms = btm_cmp(cmp)(x.btm_end(), y.btm_end());
           auto const tops = top_cmp(cmp)(x.top_end(), y.top_end());
           using namespace impl;
@@ -290,7 +291,7 @@ namespace impl {
   };
 }
 /**
- * Represents an interval in any `std::three_way_comparable` Poset.
+ * Represents an interval in any `std::three_way_comparable' Poset.
  *
  * This is a structural type so it can be used as a non-type template
  * parameter. A name ending with a trailing underscore is morally private.
@@ -334,19 +335,18 @@ struct interval : impl::interval_friends {
   constexpr interval() = default;
 
   constexpr bool empty() const ANOEXCEPT(noexcept(*this == interval{})) {
-    // what does empty mean if we don't default construct an empty?
-    ASSERT(cmp_(Btm{}, Top{}) == 0);
+    ASSERT(cmp_(Btm{}, Top{}) == 0); // an empty interval has no elements
     return *this == interval{};
   }
 
   /**
    * Construct an interval from its two ends
    */
-  constexpr interval(end<Btm> btm, end<Top> top, Cmp cmp = {}) noexcept(
-      std::is_nothrow_move_constructible_v<Btm>and
-              std::is_nothrow_move_constructible_v<Top>and
-              std::is_nothrow_default_constructible_v<interval>and noexcept(
-                  cmp_(this->btm(), this->top())))
+  constexpr interval(end<Btm> btm, end<Top> top, Cmp cmp = {}) //
+      noexcept(impl::and_(std::is_nothrow_move_constructible_v<Btm>,
+                          std::is_nothrow_move_constructible_v<Top>,
+                          std::is_nothrow_default_constructible_v<interval>,
+                          noexcept(cmp_(this->btm(), this->top()))))
       : btm_{std::move(btm.point)},
         top_{std::move(top.point)},
         btm_clusive_{btm.clusive},
@@ -368,18 +368,20 @@ struct interval : impl::interval_friends {
   /**
    * Does this interval contain x? x∈*this?
    */
-  constexpr bool
-      has(auto const& x) noexcept(noexcept(cmp_(x, btm()), cmp_(x, top()))) {
+  template<class T>
+  requires comparable_by<Btm, T, Cmp> && comparable_by<T, Top, Cmp>
+  constexpr bool has(T const& x) //
+      noexcept(noexcept(cmp_(x, btm()), cmp_(x, top()))) {
     auto const x_btm = cmp_(x, btm());
     auto const x_top = cmp_(x, top());
 
-    if(x_btm == std::partial_ordering::unordered
-       or x_top == std::partial_ordering::unordered)
-      return false;
     // no false positives because empty is normalized
-    return ((x_btm == 0) and (btm_clusive() == Clusive::in))
-        or ((x_top == 0) and (top_clusive() == Clusive::in))
-        or (0 < x_btm and x_top < 0);
+    auto const ordered =
+        not(impl::is_un(x_btm)) and not(impl::is_un(x_top));
+    return ordered
+       and (((x_btm == 0) and (btm_clusive() == Clusive::in))
+            or ((x_top == 0) and (top_clusive() == Clusive::in))
+            or (0 < x_btm and x_top < 0));
   }
 };
 
