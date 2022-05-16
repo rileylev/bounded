@@ -171,7 +171,45 @@ namespace impl {
           }));
   inline constexpr auto const btm_cmp = end_cmp(Clusive::ex);
   inline constexpr auto const top_cmp = end_cmp(Clusive::in);
+}
 
+inline constexpr auto subset_cmp = []<class Cmp>(Cmp cmp) RET(
+    [=]<class Xbtm, class Xtop, class XC, class Ybtm, class Ytop, class YC>(
+        interval<Xbtm, Xtop, XC> const& x,
+        interval<Ybtm, Ytop, YC> const& y) -> std::partial_ordering {
+      static_assert(
+          comparable_by<Xbtm, Ybtm, Cmp> && comparable_by<Xtop, Ytop, Cmp>);
+
+      using namespace impl;
+
+      switch(x.empty() << 1 | y.empty()) {
+        case 0b11: return std::partial_ordering::equivalent;
+        case 0b10: return std::partial_ordering::less;
+        case 0b01: return std::partial_ordering::greater;
+        default:
+          auto const btms = btm_cmp(cmp)(x.btm_end(), y.btm_end());
+          auto const tops = top_cmp(cmp)(x.top_end(), y.top_end());
+          using namespace impl;
+          switch(to_porder(btms)) {
+            case porder::lt:
+              switch(to_porder(tops)) {
+                case porder::gt:
+                case porder::eq: return std::partial_ordering::greater;
+                default: return std::partial_ordering::unordered;
+              }
+            case porder::eq: return tops;
+            case porder::gt:
+              switch(to_porder(tops)) {
+                case porder::lt:
+                case porder::eq: return std::partial_ordering::less;
+                default: return std::partial_ordering::unordered; ;
+              }
+            case porder::un: return std::partial_ordering::unordered;
+          }
+      }
+    });
+
+namespace impl {
   struct interval_friends {
     friend constexpr bool
         operator==(interval_friends, interval_friends) = default;
@@ -265,62 +303,15 @@ namespace impl {
      *  [0,1) <=> (0,1] = unordered
      */
     template<class Xbtm, class Xtop, class Ybtm, class Ytop, class Cmp>
-    requires std::is_empty_v<Cmp>
-    friend constexpr std::partial_ordering
+    requires std::is_empty_v<Cmp>          //
+        and comparable_by<Xbtm, Ybtm, Cmp> //
+        and comparable_by<Xtop, Ytop, Cmp>
+    friend constexpr auto
         operator<=>(interval<Xbtm, Xtop, Cmp> const& x,
-                    interval<Ybtm, Ytop, Cmp> const& y) {
-      switch(x.empty() << 1 | y.empty()) {
-        case 0b11: return std::partial_ordering::equivalent;
-        case 0b10: return std::partial_ordering::less;
-        case 0b01: return std::partial_ordering::greater;
-        default:
-          Cmp const  cmp{};
-          auto const btms = btm_cmp(cmp)(x.btm_end(), y.btm_end());
-          auto const tops = top_cmp(cmp)(x.top_end(), y.top_end());
-          using namespace impl;
-          switch(to_porder(btms)) {
-            case porder::lt:
-              switch(to_porder(tops)) {
-                case porder::gt:
-                case porder::eq: return std::partial_ordering::greater;
-                default: return std::partial_ordering::unordered;
-              }
-            case porder::eq: return tops;
-            case porder::gt:
-              switch(to_porder(tops)) {
-                case porder::lt:
-                case porder::eq: return std::partial_ordering::less;
-                default: return std::partial_ordering::unordered; ;
-              }
-            case porder::un: return std::partial_ordering::unordered;
-          }
-      }
-    }
-
-   private:
-    template<std::size_t N>
-    constexpr auto get(auto const& x) {
-      if constexpr(N == 0) return x.btm_end();
-      else return x.top_end();
-    }
+                    interval<Ybtm, Ytop, Cmp> const& y)
+            ARROW(subset_cmp(Cmp{})(x, y))
   };
 }
-}
-namespace std {
-template<class Btm, class Top, class Cmp>
-struct tuple_size<bounded::interval<Btm, Top, Cmp>>
-    : std::integral_constant<std::size_t, 2> {};
-template<class Btm, class Top, class Cmp>
-struct tuple_element<0, bounded::interval<Btm, Top, Cmp>> {
-  using type = bounded::end<Btm>;
-};
-template<class Btm, class Top, class Cmp>
-struct tuple_element<1, bounded::interval<Btm, Top, Cmp>> {
-  using type = bounded::end<Top>;
-};
-}
-namespace bounded {
-
 /**
  * Represents an interval in any `std::three_way_comparable' Poset.
  *
