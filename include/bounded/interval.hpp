@@ -241,7 +241,6 @@ namespace impl {
     friend constexpr auto operator-(auto const& x, auto const& y)
         ARROW(x + (-y))
 
-   private:
     template<class X, class Y>
     using cross_product_t =
         std::invoke_result_t<decltype([](X x, Y y) {
