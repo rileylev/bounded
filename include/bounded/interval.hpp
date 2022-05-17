@@ -1,5 +1,4 @@
 #ifndef BOUNDED_INTERVAL_HPP_INCLUDE_GUARD
-
 #define BOUNDED_INTERVAL_HPP_INCLUDE_GUARD
 
 #include "impl/macros.hpp"
@@ -210,7 +209,6 @@ inline constexpr auto subset_cmp = []<class Cmp>(Cmp cmp) RET(
     });
 
 namespace impl {
-
   template<class xb, class xt, class yb, class yt>
   using cross_product_t =
       decltype(xb{} * yb{} + xb{} * yt{} + xt{} * yb{} + xt{} * yt{});
