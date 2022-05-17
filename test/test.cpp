@@ -82,6 +82,8 @@ TEST_CASE("The empty interval annihilates under *") {
   STATIC_REQUIRE((interval<int>{} * interval{ex(0), ex(1)}).empty());
 }
 
+static_assert(comparable_by<int,int,std::compare_three_way>);
+
 TEST_CASE("Interval addition adds respective endpoints") {
   STATIC_REQUIRE(interval{in(0), ex(1)} + interval{in(1), ex(2)}
                  == interval{in(1), ex(3)});

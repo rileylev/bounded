@@ -210,16 +210,26 @@ inline constexpr auto subset_cmp = []<class Cmp>(Cmp cmp) RET(
     });
 
 namespace impl {
+
+  template<class xb, class xt, class yb, class yt>
+  using cross_product_t =
+      decltype(xb{} * yb{} + xb{} * yt{} + xt{} * yb{} + xt{} * yt{});
+
+  using T = cross_product_t<int, int, int, int>;
+  template<class Xb, class Xt, class Yb, class Yt, class Cmp>
+  using product_interval_t =
+      interval<cross_product_t<Xb, Xt, Yb, Yt>,
+               cross_product_t<Xb, Xt, Yb, Yt>,
+               Cmp>;
+
+  using plus = decltype([](auto... args) RET((args + ...)));
+
   struct interval_friends {
     friend constexpr bool
         operator==(interval_friends, interval_friends) = default;
     friend constexpr auto operator==(auto const& x, auto const& y)
         ARROW(x.btm_end() == y.btm_end() and x.top_end() == y.top_end())
 
-   private:
-    using plus = decltype([](auto... args) RET((args + ...)));
-
-   public:
     template<class Xbtm, class Xtop, class Ybtm, class Ytop, class Cmp>
     requires std::is_empty_v<Cmp> //
         and additive_group<std::invoke_result_t<plus, Xbtm, Xtop, Ybtm, Ytop>>
@@ -241,26 +251,13 @@ namespace impl {
     friend constexpr auto operator-(auto const& x, auto const& y)
         ARROW(x + (-y))
 
-    template<class X, class Y>
-    using cross_product_t =
-        std::invoke_result_t<decltype([](X x, Y y) {
-                               return x.btm() * y.btm() + x.top() * y.btm()
-                                    + x.btm() * y.top() + x.top() * y.top();
-                             }),
-                             X,
-                             Y>;
-    template<class X, class Y, class Cmp>
-    using product_interval_t =
-        interval<cross_product_t<X, Y>, cross_product_t<X, Y>, Cmp>;
-
-   public:
     template<class Xbtm, class Xtop, class Ybtm, class Ytop, class Cmp>
     friend constexpr auto
         operator*(interval<Xbtm, Xtop, Cmp> const& x,
                   interval<Ybtm, Ytop, Cmp> const& y)
-            -> product_interval_t<decltype(x), decltype(y), Cmp>
+            -> product_interval_t<Xbtm, Xtop, Ybtm, Ytop, Cmp>
     requires std::is_empty_v<Cmp> //
-        and rng<cross_product_t<decltype(x), decltype(y)>> {
+        and rng<cross_product_t<Xbtm, Xtop, Ybtm, Ytop>> {
       if(x.empty() or y.empty()) return {};
       Cmp cmp{};
 
