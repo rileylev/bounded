@@ -260,7 +260,7 @@ namespace impl {
       Cmp cmp{};
 
       auto const common_array = [](auto... xs)
-          RET(std::array{std::common_type_t<decltype(xs)...>{xs}...});
+          RET(std::array{end<cross_product_t<Xbtm,Xtop,Ybtm,Ytop>>{xs}...});
 
       auto const prods = common_array(
           // clang-format off
