@@ -131,7 +131,7 @@ struct end : impl::end_friends {
   template<class P>
   requires std::constructible_from<Poset, P>
       IMPLICIT(std::convertible_to<P, Poset>)
-  constexpr end(end<P> x) NOEX_CONS(end(static_cast<Poset>(x.point))) {}
+  constexpr end(end<P> x) NOEX_CONS(end(Poset{x.point}, x.clusive)) {}
 };
 
 template<class... Ps>
