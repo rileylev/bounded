@@ -146,10 +146,6 @@ struct end : impl::end_friends {
   constexpr end(end<P> x) NOEX_CONS(end(Poset{x.point}, x.clusive)) {}
 };
 
-template<class... Ps>
-constexpr auto map(auto f, end<Ps>... es)
-    ARROW(end{f(es.point...), (es.clusive * ...)})
-
 /**
  * Create an EXclusive end
  */
