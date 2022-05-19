@@ -159,17 +159,17 @@ requires comparable_by<Btm, Top, Cmp>
 struct interval;
 
 namespace impl {
-  inline constexpr auto end_cmp = [](Clusive target) //
-      RET([=](auto cmp)                              //
-          RET([=](auto xend, auto yend) {
-            auto const ptcmp = cmp(xend.point, yend.point);
-            return (ptcmp == 0)
-                     ? ((xend.clusive == target)
-                        <=> (yend.clusive == target))
-                     : ptcmp;
-          }));
-  inline constexpr auto const btm_cmp = end_cmp(Clusive::ex);
-  inline constexpr auto const top_cmp = end_cmp(Clusive::in);
+  inline constexpr auto break_tie =
+      [](auto o, auto breaker) NOEX(std::is_eq(o) ? breaker : o);
+  inline constexpr auto end_cmp =                     //
+      [](Clusive target)                              //
+      RET([=](auto cmp)                               //
+          RET([=](auto const& xend, auto const& yend) //
+              ARROW(break_tie(cmp(xend.point, yend.point),
+                              ((xend.clusive == target)
+                               <=> (yend.clusive == target))))));
+  inline constexpr auto btm_cmp = end_cmp(Clusive::ex);
+  inline constexpr auto top_cmp = end_cmp(Clusive::in);
 }
 
 inline constexpr auto subset_cmp = []<class Cmp>(Cmp cmp) RET(
