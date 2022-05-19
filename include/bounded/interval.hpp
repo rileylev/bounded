@@ -41,6 +41,13 @@ namespace impl {
 
   inline constexpr auto is_un = [](std::partial_ordering o)
       ARROW(o == std::partial_ordering::unordered);
+
+  constexpr auto compose2 = [](auto f, auto g)
+      RET([ f, g ](auto&&... args) ARROW(f(g(FWD(args)...))));
+  inline constexpr auto compose_() NOEX([](auto&& x) ARROW(FWD(x)))
+  inline constexpr auto compose_(auto&& f) ARROW(FWD(f))
+  inline constexpr auto compose_(auto&& f, auto&&... fs)
+      ARROW(compose2(FWD(f), compose_(FWD(fs)...)))
   /**
    * Compose functions
    *
