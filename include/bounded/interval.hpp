@@ -42,10 +42,12 @@ namespace impl {
   inline constexpr auto is_un = [](std::partial_ordering o)
       ARROW(o == std::partial_ordering::unordered);
   /**
-   * Compose two functions
+   * Compose functions
+   *
+   * Rightmost function is applied first. If no arguments are passed,
+   * return identity.
    */
-  inline constexpr auto compose =
-      [](auto f, auto g) RET([=](auto&&... args) RET(f(g(FWD(args)...))));
+  inline constexpr auto compose = LIFT(compose_);
 
   /**
    *  A partial order enum for use with switch/case
