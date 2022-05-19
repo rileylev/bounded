@@ -27,10 +27,7 @@ concept additive_group = requires(T x, T y) {
  * Does the type look like a rng (ring without identity)
  */
 template<class T>
-concept rng = requires(T x, T y) {
-  T{};
-  -x;
-  x + y;
+concept rng = additive_group<T> and requires(T x, T y) {
   x* y;
 };
 
