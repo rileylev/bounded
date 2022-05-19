@@ -54,12 +54,14 @@ namespace impl {
    */
   enum class porder : char { lt, eq, gt, un };
 
-  constexpr porder to_porder(std::partial_ordering x) noexcept {
-    if(std::is_lt(x)) return porder::lt;
-    else if(std::is_eq(x)) return porder::eq;
-    else if(std::is_gt(x)) return porder::gt;
-    else return porder::un;
-  }
+  /**
+   * Convert a `std::partial_ordering' to `impl::porder'
+   */
+  constexpr porder to_porder(std::partial_ordering x)
+      NOEX(std::is_lt(x)   ? porder::lt
+           : std::is_eq(x) ? porder::eq
+           : std::is_gt(x) ? porder::gt
+                           : porder::un)
 
   /**
    * Convert a partial_ordering to a total_ordering with precondition
