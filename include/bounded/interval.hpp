@@ -435,14 +435,14 @@ struct interval : impl::interval_friends {
                  static_cast<Cmp>(x.cmp)) {}
 
   /**
-   * Does this interval contain x? x∈*this?
+   * Does this interval contain x according to cmp? x ∈_cmp *this?
    */
-  template<class T>
-  requires comparable_by<Btm, T, Cmp> && comparable_by<T, Top, Cmp>
-  constexpr bool has(T const& x) //
-      noexcept(noexcept(cmp_(x, btm()), cmp_(x, top()))) {
-    auto const x_btm = cmp_(x, btm());
-    auto const x_top = cmp_(x, top());
+  template<class T, class Cmp_>
+  requires comparable_by<Btm, T, Cmp_> && comparable_by<T, Top, Cmp_>
+  constexpr bool has(T const& x, Cmp_ cmp) //
+      noexcept(noexcept(cmp(x, btm()), cmp(x, top()))) {
+    auto const x_btm = cmp(x, btm());
+    auto const x_top = cmp(x, top());
 
     // no false positives because empty is normalized
     auto const ordered =
@@ -452,6 +452,11 @@ struct interval : impl::interval_friends {
             or ((x_top == 0) and (top_clusive() == Clusive::in))
             or (0 < x_btm and x_top < 0));
   }
+  /**
+   * Does this interval contain x? x∈*this?
+   */
+  template<class T>
+  constexpr bool has(T const& x) NOEX(has(x, cmp_))
 };
 }
 #endif
