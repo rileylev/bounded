@@ -31,6 +31,8 @@ concept rng = additive_group<T> and requires(T x, T y) {
   x* y;
 };
 
+constexpr auto operator-(auto const& x, auto const& y) ARROW(x + (-y))
+
 namespace impl {
   /**
    *  Ands all its arguments together
@@ -84,6 +86,10 @@ namespace impl {
       case porder::un: ASSERT(false);
     };
   };
+
+  using plus  = decltype([](auto... args) RET((args + ...)));
+  using times = decltype([](auto... args) RET((args * ...)));
+  using minus = decltype([](auto... args) RET((args - ...)));
 }
 
 /**
@@ -98,27 +104,25 @@ constexpr Clusive operator*(Clusive x, Clusive y)
 
 template<class Poset>
 struct end;
+
+template<class... Ps>
+constexpr auto map(auto f, end<Ps> const&... es)
+    ARROW(end{f(es.point...), (es.clusive * ...)})
+
 namespace impl {
   struct end_friends {
     friend constexpr bool operator==(end_friends, end_friends) = default;
     template<std::three_way_comparable P>
-    friend constexpr auto operator+(end<P> const& x)
-        ARROW(end{+x.point, x.clusive})
+    friend constexpr auto operator+(end<P> const& x) ARROW(map(plus{}, x))
     template<std::three_way_comparable P>
-    friend constexpr auto operator-(end<P> const& x)
-        ARROW(end{-x.point, x.clusive})
+    friend constexpr auto operator-(end<P> const& x) ARROW(map(minus{}, x))
 
     template<std::three_way_comparable X, std::three_way_comparable Y>
     friend constexpr auto operator+(end<X> const& x, end<Y> const& y)
-        ARROW(end{x.point + y.point, x.clusive* y.clusive})
-
-    template<std::three_way_comparable X, std::three_way_comparable Y>
-    friend constexpr auto operator-(end<X> const& x, end<Y> const& y)
-        ARROW(x + (-y))
-
+        ARROW(map(plus{}, x, y))
     template<std::three_way_comparable X, std::three_way_comparable Y>
     friend constexpr auto operator*(end<X> const& x, end<Y> const& y)
-        ARROW(end{x.point * y.point, x.clusive* y.clusive})
+        ARROW(map(times{}, x, y))
   };
 }
 
@@ -217,9 +221,36 @@ inline constexpr auto subset_cmp = []<class Cmp>(Cmp cmp) RET(
     });
 
 namespace impl {
+  template<class T>
+  using cmp_t = std::remove_reference_t<decltype(std::declval<T>().cmp())>;
+
+  template<class... Ts>
+  using common_cmp_t = std::common_type_t<cmp_t<Ts>...>;
+
+  template<class T>
+  constexpr auto empty_if(bool cond, T x) ARROW(cond ? T{} : x)
+}
+
+template<class... Is>
+requires std::is_empty_v<impl::common_cmp_t<Is...>>
+constexpr auto map_increasing(auto f, Is const&... is) //
+    ARROW(impl::empty_if((is.empty() or ...),
+                         interval{map(f, is.btm_end()...),
+                                  map(f, is.top_end()...),
+                                  impl::common_cmp_t<Is...>{}}))
+template<class... Is>
+requires std::is_empty_v<impl::common_cmp_t<Is...>>
+constexpr auto map_decreasing(auto f, Is const&... is) //
+    ARROW(impl::empty_if((is.empty() or ...),
+                         interval{map(f, is.top_end()...),
+                                  map(f, is.btm_end()...),
+                                  impl::common_cmp_t<Is...>{}}))
+
+namespace impl {
   template<class xb, class xt, class yb, class yt>
   using cross_product_t =
-      decltype(xb{} * yb{} + xb{} * yt{} + xt{} * yb{} + xt{} * yt{});
+      std::remove_reference_t<decltype((xb{} * yb{}) + (xb{} * yt{})
+                                       + (xt{} * yb{}) + (xt{} * yt{}))>;
 
   using T = cross_product_t<int, int, int, int>;
   template<class Xb, class Xt, class Yb, class Yt, class Cmp>
@@ -228,39 +259,34 @@ namespace impl {
                cross_product_t<Xb, Xt, Yb, Yt>,
                Cmp>;
 
-  using plus = decltype([](auto... args) RET((args + ...)));
-
   struct interval_friends {
     friend constexpr bool
         operator==(interval_friends, interval_friends) = default;
     friend constexpr auto operator==(auto const& x, auto const& y)
         ARROW(x.btm_end() == y.btm_end() and x.top_end() == y.top_end())
 
-    template<class Xbtm, class Xtop, class Ybtm, class Ytop, class Cmp>
-    requires std::is_empty_v<Cmp> //
-        and additive_group<std::invoke_result_t<plus, Xbtm, Xtop, Ybtm, Ytop>>
-    friend constexpr auto operator+(interval<Xbtm, Xtop, Cmp> const& x,
-                                    interval<Ybtm, Ytop, Cmp> const& y)
-        ARROW((x.empty() or y.empty())
-                  ? interval<std::invoke_result_t<std::plus<>, Xbtm, Ybtm>,
-                             std::invoke_result_t<std::plus<>, Xtop, Ytop>,
-                             Cmp>{}
-                  : interval{x.btm_end() + y.btm_end(),
-                             x.top_end() + y.top_end(),
-                             Cmp{}})
+    template<class Xbtm, class Xtop, class Xc, class Ybtm, class Ytop, class Yc>
+    requires additive_group<std::invoke_result_t<plus, Xbtm, Xtop, Ybtm, Ytop>>
+    friend constexpr auto
+        operator+(interval<Xbtm, Xtop, Xc> const& x,
+                  interval<Ybtm, Ytop, Yc> const& y)
+            ARROW(map_increasing(plus{}, x, y))
 
     friend constexpr auto operator-(auto const& x)
-        ARROW(interval{-x.top_end(), -x.btm_end(), x.cmp()})
+        ARROW(map_decreasing(minus{}, x))
     friend constexpr auto operator+(auto const& x)
-        ARROW(interval{+x.btm_end(), +x.top_end(), x.cmp()})
+        ARROW(map_increasing(plus{}, x))
 
-    friend constexpr auto operator-(auto const& x, auto const& y)
-        ARROW(x + (-y))
-
-    template<class Xbtm, class Xtop, class Ybtm, class Ytop, class Cmp>
+    template<class Xbtm,
+             class Xtop,
+             class Xc,
+             class Ybtm,
+             class Ytop,
+             class Yc,
+             class Cmp = std::common_type_t<Xc, Yc>>
     friend constexpr auto
-        operator*(interval<Xbtm, Xtop, Cmp> const& x,
-                  interval<Ybtm, Ytop, Cmp> const& y)
+        operator*(interval<Xbtm, Xtop, Xc> const& x,
+                  interval<Ybtm, Ytop, Yc> const& y)
             -> product_interval_t<Xbtm, Xtop, Ybtm, Ytop, Cmp>
     requires std::is_empty_v<Cmp> //
         and rng<cross_product_t<Xbtm, Xtop, Ybtm, Ytop>> {
@@ -304,13 +330,19 @@ namespace impl {
      *  [0,1]  <  [0,2]
      *  [0,1) <=> (0,1] = unordered
      */
-    template<class Xbtm, class Xtop, class Ybtm, class Ytop, class Cmp>
+    template<class Xbtm,
+             class Xtop,
+             class Xc,
+             class Ybtm,
+             class Ytop,
+             class Yc,
+             class Cmp = std::common_type_t<Xc, Yc>>
     requires std::is_empty_v<Cmp>          //
         and comparable_by<Xbtm, Ybtm, Cmp> //
         and comparable_by<Xtop, Ytop, Cmp>
     friend constexpr auto
-        operator<=>(interval<Xbtm, Xtop, Cmp> const& x,
-                    interval<Ybtm, Ytop, Cmp> const& y)
+        operator<=>(interval<Xbtm, Xtop, Xc> const& x,
+                    interval<Ybtm, Ytop, Yc> const& y)
             ARROW(subset_cmp(Cmp{})(x, y))
   };
 }
@@ -421,27 +453,5 @@ struct interval : impl::interval_friends {
             or (0 < x_btm and x_top < 0));
   }
 };
-
-constexpr auto map_order_preserving(auto f, auto... is)
-    ARROW((!is.empty() && ...)
-              ? decltype(interval{map(f, is.btm_end()...),
-                                  map(f, is.top_end()...)}){}
-              : interval{map(f, is.btm_end()...), map(f, is.top_end()...)})
-constexpr auto map_order_reversing(auto f, auto... is)
-    ARROW((!is.empty() && ...)
-              ? decltype(interval{map(f, is.top_end()...),
-                                  map(f, is.btm_end()...)}){}
-              : interval{map(f, is.top_end()...), map(f, is.btm_end()...)})
-namespace impl {
-  // TODO: clearer name
-  constexpr auto or_(auto x, auto y) ARROW(x ? x : y)
 }
-constexpr auto map_monotonic(auto f, auto... is)
-    ARROW(impl::or_(map_order_preserving(f, is...),
-                    map_order_reversing(f, is...)))
-
-template<class T>
-inline constexpr auto finites =
-    interval{std::numeric_limits<T>::lowest, std::numeric_limits<T>::max};
-} // namespace bounded
 #endif
