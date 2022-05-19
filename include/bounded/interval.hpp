@@ -1,10 +1,10 @@
-#ifndef BOUNDED_INTERVAL_HPP_INCLUDE_GUARD
-#define BOUNDED_INTERVAL_HPP_INCLUDE_GUARD
+#ifndef INCLUDE_GUARD_bounded_interval_hpp
+#define INCLUDE_GUARD_bounded_interval_hpp
 
 #include "impl/macros.hpp"
 
 #include <concepts>
-#include <tuple>
+#include <functional>
 #include <array>
 #include <algorithm>
 #include <compare>
@@ -186,9 +186,7 @@ inline constexpr auto subset_cmp = []<class Cmp>(Cmp cmp) RET(
         interval<Ybtm, Ytop, YC> const& y) -> std::partial_ordering {
       static_assert(
           comparable_by<Xbtm, Ybtm, Cmp> && comparable_by<Xtop, Ytop, Cmp>);
-
       using namespace impl;
-
       switch(x.empty() << 1 | y.empty()) {
         case 0b11: return std::partial_ordering::equivalent;
         case 0b10: return std::partial_ordering::less;
@@ -209,7 +207,7 @@ inline constexpr auto subset_cmp = []<class Cmp>(Cmp cmp) RET(
               switch(to_porder(tops)) {
                 case porder::lt:
                 case porder::eq: return std::partial_ordering::less;
-                default: return std::partial_ordering::unordered; ;
+                default: return std::partial_ordering::unordered;
               }
             case porder::un: return std::partial_ordering::unordered;
           }
@@ -287,18 +285,14 @@ namespace impl {
     requires std::is_empty_v<Cmp> //
         and rng<cross_product_t<Xbtm, Xtop, Ybtm, Ytop>> {
       if(x.empty() or y.empty()) return {};
-      Cmp cmp{};
 
-      auto const common_array = [](auto... xs)
-          RET(std::array{end<cross_product_t<Xbtm,Xtop,Ybtm,Ytop>>{xs}...});
-
-      auto const prods = common_array(
-          // clang-format off
+      Cmp        cmp{};
+      auto const common_array = [](auto... xs) RET(
+          std::array{end<cross_product_t<Xbtm, Xtop, Ybtm, Ytop>>{xs}...});
+      auto const prods = common_array( // clang-format off
         x.btm_end() * y.btm_end()   ,   x.btm_end() * y.top_end(),
         x.top_end() * y.btm_end()   ,   x.top_end() * y.top_end()
-          // clang-format on
-      );
-
+      ); // clang-format on
       constexpr auto lt = compose(LIFT(std::is_lt), assume_total);
       // This is what std does if you sort NaNs.
       // TODO: is it better to be stricter?
@@ -312,7 +306,6 @@ namespace impl {
                             compose(lt, top_cmp(cmp)));
       return interval{btm_end, top_end};
     }
-    // tricky cases [-1,1) * [-1,1] = [-1,1]
 
     /**
      * Three-way-compare intervals by set inclusion: A < B iff A ⊂ B
@@ -426,9 +419,7 @@ struct interval : impl::interval_friends {
                           std::convertible_to<T, Top>,
                           std::convertible_to<C, Cmp>))
   constexpr interval(interval<B, T, C> const& x)
-      : interval(static_cast<Btm>(x.btm_end()),
-                 static_cast<Top>(x.top_end()),
-                 static_cast<Cmp>(x.cmp)) {}
+      NOEX_CONS(interval(Btm{x.btm_end()}, Top{x.top_end()}, Cmp{x.cmp})){};
 
   /**
    * Does this interval contain x according to cmp? x ∈_cmp *this?
